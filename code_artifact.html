@@ -1,0 +1,1422 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>直角坐標三角封鎖棋 | Triangle Lock Grid</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans TC', 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            overflow-x: hidden;
+        }
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+        .canvas-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            max-height: 78vh;
+            max-width: 78vh;
+            margin: 0 auto;
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            border-radius: 1rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+            cursor: crosshair;
+            touch-action: none;
+        }
+        @keyframes pulse-border {
+            0%, 100% { border-color: rgba(56, 189, 248, 0.9); box-shadow: 0 0 15px rgba(56, 189, 248, 0.35); }
+            50% { border-color: rgba(56, 189, 248, 0.25); box-shadow: 0 0 4px rgba(56, 189, 248, 0.1); }
+        }
+        .active-turn-card {
+            animation: pulse-border 2s infinite;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-sky-500 selection:text-white">
+
+    <!-- Top Navigation & Configuration Bar -->
+    <header class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 sticky top-0 z-30 px-4 py-3">
+        <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+            <!-- Game Title -->
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2L2 19.5h20L12 2zm0 5.5l6.5 11.5h-13L12 7.5z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-lg md:text-xl font-bold tracking-tight bg-gradient-to-r from-white via-sky-200 to-indigo-300 bg-clip-text text-transparent">
+                        直角坐標三角封鎖棋
+                    </h1>
+                    <p class="text-xs text-slate-400">連線奪取三角形・封鎖區域阻斷對手</p>
+                </div>
+            </div>
+
+            <!-- Editable Game Parameters (k, n, L) -->
+            <div class="flex flex-wrap items-center gap-2 sm:gap-3 bg-slate-800/80 p-1.5 sm:px-3 sm:py-2 rounded-xl border border-slate-700/70">
+                <div class="flex items-center gap-1.5">
+                    <label for="param-k" class="text-xs text-slate-300 font-medium">玩家數 <span class="mono text-sky-400">k</span>:</label>
+                    <input id="param-k" type="number" min="2" max="6" value="2" 
+                        class="w-14 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-center text-sm mono font-semibold text-white focus:outline-none focus:border-sky-500">
+                </div>
+                <div class="h-4 w-[1px] bg-slate-700 hidden sm:block"></div>
+                <div class="flex items-center gap-1.5">
+                    <label for="param-n" class="text-xs text-slate-300 font-medium">點數量 <span class="mono text-emerald-400">n</span>:</label>
+                    <input id="param-n" type="number" min="4" max="50" value="16" 
+                        class="w-16 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-center text-sm mono font-semibold text-white focus:outline-none focus:border-sky-500">
+                </div>
+                <div class="h-4 w-[1px] bg-slate-700 hidden sm:block"></div>
+                <div class="flex items-center gap-1.5">
+                    <label for="param-L" class="text-xs text-slate-300 font-medium">棋局大小 <span class="mono text-amber-400">L</span>:</label>
+                    <input id="param-L" type="number" min="8" max="100" value="30" 
+                        class="w-16 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-center text-sm mono font-semibold text-white focus:outline-none focus:border-sky-500">
+                </div>
+                <button id="btn-new-game" class="ml-1 px-3.5 py-1.5 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white text-xs sm:text-sm font-semibold rounded-lg shadow-md shadow-sky-500/20 active:scale-95 transition flex items-center gap-1.5">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    生成新棋局
+                </button>
+                <button id="btn-rules" class="px-2.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs sm:text-sm font-medium rounded-lg transition">
+                    規則說明
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Layout -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+        <!-- Left / Center Column: Interactive Coordinate Grid Canvas (7 cols on desktop) -->
+        <div class="lg:col-span-7 flex flex-col items-center w-full">
+            <!-- Status Banner above Canvas -->
+            <div class="w-full mb-3 flex flex-wrap items-center justify-between gap-2 bg-slate-900/90 border border-slate-800 px-4 py-2.5 rounded-xl">
+                <div class="flex items-center gap-2.5">
+                    <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold">當前回合：</span>
+                    <div id="turn-badge" class="flex items-center gap-2 px-3 py-1 rounded-full text-sm font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40">
+                        <span id="turn-dot" class="w-2.5 h-2.5 rounded-full bg-sky-400"></span>
+                        <span id="turn-player-name">玩家 A</span>
+                    </div>
+                    <span id="bonus-turn-badge" class="hidden px-2.5 py-0.5 text-xs font-bold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-bounce">
+                        ★ 得分獎勵回合！
+                    </span>
+                </div>
+
+                <div class="flex items-center gap-4 text-xs text-slate-300">
+                    <div>已連線段：<span id="stat-segments" class="mono font-bold text-white">0</span></div>
+                    <div>封鎖三角形：<span id="stat-triangles" class="mono font-bold text-amber-400">0</span></div>
+                    <div>剩餘合法連線：<span id="stat-valid-moves" class="mono font-bold text-emerald-400">--</span></div>
+                </div>
+            </div>
+
+            <!-- Canvas Container -->
+            <div class="canvas-container">
+                <canvas id="game-canvas"></canvas>
+                
+                <!-- Floating Hover Coordinate Tooltip -->
+                <div id="canvas-tooltip" class="hidden pointer-events-none absolute top-3 left-3 bg-slate-900/90 backdrop-blur border border-slate-700 px-3 py-1.5 rounded-lg text-xs mono text-slate-200 shadow-lg">
+                    游標: (0, 0)
+                </div>
+            </div>
+
+            <!-- Visual Helper Bar below Canvas -->
+            <div class="w-full mt-3 flex flex-wrap items-center justify-between gap-3 bg-slate-900/60 border border-slate-800/80 px-4 py-2 rounded-xl text-xs text-slate-400">
+                <div class="flex flex-wrap items-center gap-4">
+                    <label class="inline-flex items-center gap-1.5 cursor-pointer select-none text-slate-300 hover:text-white">
+                        <input type="checkbox" id="toggle-coords" checked class="rounded bg-slate-800 border-slate-600 text-sky-500 focus:ring-0">
+                        <span>顯示點坐標 <span class="mono">(X,Y)</span></span>
+                    </label>
+                    <label class="inline-flex items-center gap-1.5 cursor-pointer select-none text-slate-300 hover:text-white">
+                        <input type="checkbox" id="toggle-hints" checked class="rounded bg-slate-800 border-slate-600 text-sky-500 focus:ring-0">
+                        <span>選取一點時高亮可連目標點</span>
+                    </label>
+                </div>
+                <div class="text-slate-400">
+                    💡 可直接點擊棋盤上的兩點，或在右側面板輸入點編號連線
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Controls, Players Scoreboard, Coordinate List & History (5 cols on desktop) -->
+        <div class="lg:col-span-5 flex flex-col gap-4 w-full">
+
+            <!-- 1. Manual Input & Action Card -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-sm font-bold text-slate-200 flex items-center gap-2">
+                        <span class="w-2 h-4 bg-sky-500 rounded-full"></span>
+                        回合連線操作（輸入兩點或點擊棋盤）
+                    </h2>
+                    <button id="btn-hint-move" class="text-xs text-sky-400 hover:text-sky-300 underline">
+                        提示一組可行連線
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 mb-3">
+                    <div>
+                        <label for="select-p1" class="block text-xs text-slate-400 mb-1">起點 (第一點)</label>
+                        <select id="select-p1" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm mono text-white focus:outline-none focus:border-sky-500">
+                            <!-- Dynamically populated -->
+                        </select>
+                    </div>
+                    <div>
+                        <label for="select-p2" class="block text-xs text-slate-400 mb-1">終點 (第二點)</label>
+                        <select id="select-p2" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm mono text-white focus:outline-none focus:border-sky-500">
+                            <!-- Dynamically populated -->
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Validation Message Box -->
+                <div id="move-feedback" class="mb-3 px-3 py-2 rounded-xl text-xs font-medium bg-slate-800/70 text-slate-300 border border-slate-700/60 flex items-center gap-2 min-h-[36px]">
+                    <span>請在棋盤點擊兩個點，或從上方下拉選單選擇兩點進行連線。</span>
+                </div>
+
+                <div class="flex gap-2">
+                    <button id="btn-connect" class="flex-1 py-2.5 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 disabled:from-slate-700 disabled:to-slate-800 disabled:text-slate-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-emerald-600/20 active:scale-[0.99] transition">
+                        確認連線
+                    </button>
+                    <button id="btn-clear-sel" class="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl border border-slate-700 transition">
+                        清除選取
+                    </button>
+                </div>
+            </div>
+
+            <!-- 2. Players Scoreboard Card -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
+                <h2 class="text-sm font-bold text-slate-200 flex items-center gap-2 mb-3">
+                    <span class="w-2 h-4 bg-amber-500 rounded-full"></span>
+                    玩家計分板
+                </h2>
+                <div id="scoreboard-container" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-2.5">
+                    <!-- Populated via JS -->
+                </div>
+            </div>
+
+            <!-- 3. Tabs for Coordinate List (n points) & Move History -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col h-80">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-2.5 mb-3">
+                    <div class="flex gap-2">
+                        <button id="tab-btn-points" class="px-3 py-1 rounded-lg text-xs font-bold bg-sky-500/20 text-sky-400 border border-sky-500/30">
+                            場上坐標點 (<span id="points-count-label">16</span>)
+                        </button>
+                        <button id="tab-btn-history" class="px-3 py-1 rounded-lg text-xs font-bold text-slate-400 hover:text-slate-200">
+                            回合紀錄 (<span id="history-count-label">0</span>)
+                        </button>
+                    </div>
+                    <span class="text-[11px] text-slate-500">點擊列表中的點可直接選取</span>
+                </div>
+
+                <!-- Points List Panel -->
+                <div id="panel-points" class="flex-1 overflow-y-auto pr-1 grid grid-cols-2 sm:grid-cols-3 gap-2 content-start">
+                    <!-- Populated via JS -->
+                </div>
+
+                <!-- Move History Panel -->
+                <div id="panel-history" class="hidden flex-1 overflow-y-auto pr-1 space-y-1.5 text-xs">
+                    <!-- Populated via JS -->
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Rules Modal -->
+    <div id="rules-modal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-6 shadow-2xl">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-sky-400"></span>
+                    遊戲規則與幾何判定說明
+                </h3>
+                <button id="btn-close-rules" class="text-slate-400 hover:text-white p-1">✕</button>
+            </div>
+            <div class="space-y-3 text-sm text-slate-300 leading-relaxed">
+                <p><strong class="text-sky-400">1. 開局設定：</strong>在 <span class="mono">0 ≤ X ≤ L</span>、<span class="mono">0 ≤ Y ≤ L</span> 的正整數直角坐標系統上隨機生成 <span class="mono">n</span> 個不重複的坐標點，共有 <span class="mono">k</span> 名玩家輪流進行回合。</p>
+                <p><strong class="text-sky-400">2. 連線規則：</strong>每位玩家在自己的回合可選擇場上任意兩點連成一條新線段（可直接點擊棋盤上的兩點，或在右側選單選擇兩點）。</p>
+                <p><strong class="text-amber-400">3. 三角形得分與獎勵回合：</strong>當玩家新連上的線段與場上已有的其他兩條線段組成<strong>三角形（三頂點皆為已連線的場上點）</strong>時：</p>
+                <ul class="list-disc list-inside pl-2 space-y-1 text-xs text-slate-300">
+                    <li>每組成一個新三角形，該玩家獲得 <strong>+1 分</strong>（若一線同時在兩側構成兩個三角形則得 2 分）。</li>
+                    <li>得分的玩家可<strong>立即再進行一個額外回合</strong>！</li>
+                </ul>
+                <p><strong class="text-rose-400">4. 封鎖區域限制：</strong>已組成三角形的內部區域即被<strong>永久封鎖</strong>（塗上得分玩家的代表色）。之後任何玩家生成的線段：</p>
+                <ul class="list-disc list-inside pl-2 space-y-1 text-xs text-slate-300">
+                    <li><strong>不可穿過任何封鎖三角形的內部區域</strong>或切割封鎖三角形的邊。</li>
+                    <li>也不允許新生成的三角形將其他點或已封鎖區域包圍在內部，或直接穿過場上第三個點。</li>
+                </ul>
+                <p><strong class="text-emerald-400">5. 勝負判定：</strong>當輪到某位玩家時，場上已無任何合法的兩點可供連線，遊戲立即結束，由總得分最高的玩家獲勝！</p>
+            </div>
+            <div class="mt-6 flex justify-end">
+                <button id="btn-Confirm-rules" class="px-5 py-2 bg-sky-500 hover:bg-sky-400 text-white text-sm font-bold rounded-xl transition">
+                    明白規則，返回棋局
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Over Modal -->
+    <div id="gameover-modal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl text-center">
+            <div class="w-16 h-16 mx-auto mb-3 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-3xl">
+                🏆
+            </div>
+            <h3 class="text-2xl font-extrabold text-white mb-1">遊戲結束！</h3>
+            <p class="text-xs text-slate-400 mb-4">場上所有合法的兩點連線皆已被封鎖或連滿</p>
+            
+            <div id="winner-banner" class="py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500/20 via-yellow-500/20 to-amber-500/20 border border-amber-500/40 text-amber-300 font-bold text-lg mb-4">
+                玩家 A 獲勝！
+            </div>
+
+            <div id="final-scores-list" class="space-y-2 mb-6 text-left">
+                <!-- Populated via JS -->
+            </div>
+
+            <div class="flex gap-3">
+                <button id="btn-close-gameover" class="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold rounded-xl border border-slate-700 transition">
+                    檢視最終棋盤
+                </button>
+                <button id="btn-play-again" class="flex-1 py-2.5 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white text-sm font-bold rounded-xl shadow-lg transition">
+                    再來一局
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * 直角坐標三角封鎖棋 (Triangle Lock Grid Game)
+         * Complete Geometric Engine + Canvas UI
+         */
+
+        // Player definitions (supports k = 2 to 6)
+        const PLAYER_PROFILES = [
+            { id: 0, name: '玩家 A', code: 'A', color: '#38bdf8', fill: 'rgba(56, 189, 248, 0.34)', border: '#0284c7' },
+            { id: 1, name: '玩家 B', code: 'B', color: '#f43f5e', fill: 'rgba(244, 63, 94, 0.34)', border: '#e11d48' },
+            { id: 2, name: '玩家 C', code: 'C', color: '#10b981', fill: 'rgba(16, 185, 129, 0.34)', border: '#059669' },
+            { id: 3, name: '玩家 D', code: 'D', color: '#f59e0b', fill: 'rgba(245, 158, 11, 0.34)', border: '#d97706' },
+            { id: 4, name: '玩家 E', code: 'E', color: '#a855f7', fill: 'rgba(168, 85, 247, 0.34)', border: '#9333ea' },
+            { id: 5, name: '玩家 F', code: 'F', color: '#ec4899', fill: 'rgba(236, 72, 153, 0.34)', border: '#db2777' }
+        ];
+
+        // Global Game State
+        const state = {
+            k: 2,                  // Number of players (default 2)
+            n: 16,                 // Number of points (default 16)
+            L: 30,                 // Grid size (default 30, 1 <= X,Y <= L)
+            points: [],            // Array of { id: 1..n, x, y }
+            segments: [],          // Array of { u, v, player } where u < v are point IDs
+            triangles: [],         // Array of { a, b, c, player } where a < b < c are point IDs
+            players: [],           // Array of active players with score
+            currentTurn: 0,        // Index of current player (0..k-1)
+            isBonusTurn: false,    // True if current turn is an extra turn from scoring
+            selectedP1: null,      // Point ID 1..n
+            selectedP2: null,      // Point ID 1..n
+            hoveredPoint: null,    // Point ID 1..n currently hovered on canvas
+            mouseGridPos: null,    // { x, y } on grid for tooltip
+            validMoves: [],        // Cached list of valid pairs { u, v }
+            history: [],           // Move log
+            gameOver: false,
+            showCoords: true,
+            showHints: true
+        };
+
+        // DOM References
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const paramK = document.getElementById('param-k');
+        const paramN = document.getElementById('param-n');
+        const paramL = document.getElementById('param-L');
+        const selectP1 = document.getElementById('select-p1');
+        const selectP2 = document.getElementById('select-p2');
+        const moveFeedback = document.getElementById('move-feedback');
+        const btnConnect = document.getElementById('btn-connect');
+        const btnClearSel = document.getElementById('btn-clear-sel');
+        const scoreboardContainer = document.getElementById('scoreboard-container');
+        const panelPoints = document.getElementById('panel-points');
+        const panelHistory = document.getElementById('panel-history');
+
+        // ============================================================================
+        // Exact Integer 2D Computational Geometry Engine
+        // ============================================================================
+
+        /**
+         * Cross product of (B - A) x (C - A).
+         * Returns > 0 for counter-clockwise, < 0 for clockwise, 0 for collinear.
+         */
+        function crossProduct(A, B, C) {
+            return (B.x - A.x) * (C.y - A.y) - (B.y - A.y) * (C.x - A.x);
+        }
+
+        /**
+         * Checks if point P lies strictly in the interior of segment AB (excluding A and B).
+         */
+        function isPointStrictlyOnSegment(P, A, B) {
+            if ((P.x === A.x && P.y === A.y) || (P.x === B.x && P.y === B.y)) return false;
+            if (crossProduct(A, B, P) !== 0) return false;
+            const minX = Math.min(A.x, B.x), maxX = Math.max(A.x, B.x);
+            const minY = Math.min(A.y, B.y), maxY = Math.max(A.y, B.y);
+            return P.x >= minX && P.x <= maxX && P.y >= minY && P.y <= maxY;
+        }
+
+        /**
+         * Checks if point P lies on segment AB (including endpoints A and B).
+         */
+        function isPointOnSegment(P, A, B) {
+            if (crossProduct(A, B, P) !== 0) return false;
+            const minX = Math.min(A.x, B.x), maxX = Math.max(A.x, B.x);
+            const minY = Math.min(A.y, B.y), maxY = Math.max(A.y, B.y);
+            return P.x >= minX && P.x <= maxX && P.y >= minY && P.y <= maxY;
+        }
+
+        /**
+         * Checks if two segments AB and CD strictly intersect at a single interior point
+         * (excluding shared endpoints).
+         */
+        function segmentsStrictlyCross(A, B, C, D) {
+            const cp1 = crossProduct(A, B, C);
+            const cp2 = crossProduct(A, B, D);
+            const cp3 = crossProduct(C, D, A);
+            const cp4 = crossProduct(C, D, B);
+
+            if (((cp1 > 0 && cp2 < 0) || (cp1 < 0 && cp2 > 0)) &&
+                ((cp3 > 0 && cp4 < 0) || (cp3 < 0 && cp4 > 0))) {
+                return true;
+            }
+            return false;
+        }
+
+        /**
+         * Checks if point P (which may have fractional coordinates, e.g., midpoint)
+         * is strictly inside triangle ABC.
+         */
+        function isPointStrictlyInTriangle(P, A, B, C) {
+            const cp1 = crossProduct(A, B, P);
+            const cp2 = crossProduct(B, C, P);
+            const cp3 = crossProduct(C, A, P);
+            const hasPos = (cp1 > 1e-9) || (cp2 > 1e-9) || (cp3 > 1e-9);
+            const hasNeg = (cp1 < -1e-9) || (cp2 < -1e-9) || (cp3 < -1e-9);
+            const hasZero = (Math.abs(cp1) <= 1e-9) || (Math.abs(cp2) <= 1e-9) || (Math.abs(cp3) <= 1e-9);
+            if (hasZero) return false;
+            return !(hasPos && hasNeg);
+        }
+
+        /**
+         * Checks if point P is inside or on the boundary of triangle ABC.
+         */
+        function isPointInOrOnTriangle(P, A, B, C) {
+            const cp1 = crossProduct(A, B, P);
+            const cp2 = crossProduct(B, C, P);
+            const cp3 = crossProduct(C, A, P);
+            const hasPos = (cp1 > 1e-9) || (cp2 > 1e-9) || (cp3 > 1e-9);
+            const hasNeg = (cp1 < -1e-9) || (cp2 < -1e-9) || (cp3 < -1e-9);
+            return !(hasPos && hasNeg);
+        }
+
+        /**
+         * Checks whether proposed segment PQ passes through the blocked region of triangle ABC.
+         * A segment PQ is blocked by triangle ABC if:
+         * 1. Any sample point along the open segment PQ lies strictly inside triangle ABC.
+         * 2. Segment PQ strictly crosses any of the 3 edges (AB, BC, CA) of the blocked triangle.
+         * 3. Any vertex A, B, C lies strictly on the interior of segment PQ.
+         */
+        function doesSegmentIntersectBlockedTriangle(P, Q, A, B, C) {
+            // If PQ is literally one of the edges of triangle ABC, it already exists anyway
+            const triEdges = [[A, B], [B, C], [C, A]];
+
+            // 1. Check if PQ strictly crosses any edge of triangle ABC
+            for (const [E1, E2] of triEdges) {
+                if (segmentsStrictlyCross(P, Q, E1, E2)) {
+                    return true;
+                }
+                // Check if P or Q lies strictly in the interior of a triangle edge
+                if (isPointStrictlyOnSegment(P, E1, E2) || isPointStrictlyOnSegment(Q, E1, E2)) {
+                    return true;
+                }
+            }
+
+            // 2. Check if any vertex of the triangle lies strictly on segment PQ
+            if (isPointStrictlyOnSegment(A, P, Q) ||
+                isPointStrictlyOnSegment(B, P, Q) ||
+                isPointStrictlyOnSegment(C, P, Q)) {
+                return true;
+            }
+
+            // 3. Check midpoint and quarter-points of PQ to see if the open segment lies inside ABC
+            // (For instance, if P is vertex A and Q is outside, but PQ passes through edge BC -> caught by #1;
+            //  if P and Q are both inside or one is inside -> caught by checking interior sample points).
+            const samples = [0.2, 0.5, 0.8];
+            for (const t of samples) {
+                const samplePt = {
+                    x: P.x + (Q.x - P.x) * t,
+                    y: P.y + (Q.y - P.y) * t
+                };
+                if (isPointStrictlyInTriangle(samplePt, A, B, C)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /**
+         * Helper to get point object by ID (1..n)
+         */
+        function getPoint(id) {
+            return state.points[id - 1];
+        }
+
+        /**
+         * Checks if segment (u, v) already exists
+         */
+        function hasSegment(u, v) {
+            const minId = Math.min(u, v);
+            const maxId = Math.max(u, v);
+            return state.segments.some(s => s.u === minId && s.v === maxId);
+        }
+
+        /**
+         * Validates whether connecting point IDs (u, v) is legal.
+         * Returns { valid: boolean, reason: string }
+         */
+        function validateMove(u, v) {
+            if (!u || !v) {
+                return { valid: false, reason: '請選擇兩個不同的點進行連線。' };
+            }
+            if (u === v) {
+                return { valid: false, reason: '起點與終點不能為同一個點 (P' + u + ')。' };
+            }
+            if (hasSegment(u, v)) {
+                return { valid: false, reason: `點 P${u} 與 P${v} 之間已經存在連線！` };
+            }
+
+            const P = getPoint(u);
+            const Q = getPoint(v);
+
+            // Check if segment PQ passes directly through any third point on the board
+            for (const R of state.points) {
+                if (R.id !== u && R.id !== v) {
+                    if (isPointStrictlyOnSegment(R, P, Q)) {
+                        return {
+                            valid: false,
+                            reason: `不可直接跨過共線的中間點 P${R.id}(${R.x},${R.y})，請分段連線。`
+                        };
+                    }
+                }
+            }
+
+            // Check if segment PQ passes through any existing blocked triangle region
+            for (const tri of state.triangles) {
+                const A = getPoint(tri.a);
+                const B = getPoint(tri.b);
+                const C = getPoint(tri.c);
+                if (doesSegmentIntersectBlockedTriangle(P, Q, A, B, C)) {
+                    return {
+                        valid: false,
+                        reason: `連線被已封鎖的三角形區域 (△P${tri.a}-P${tri.b}-P${tri.c}) 阻擋！`
+                    };
+                }
+            }
+
+            return { valid: true, reason: `合法連線：可連接 P${u}(${P.x},${P.y}) 與 P${v}(${Q.x},${Q.y})` };
+        }
+
+        /**
+         * Finds all valid new triangles formed when segment (u, v) is added.
+         * A triangle (u, v, w) is valid and newly formed if:
+         * 1. Segments (u, w) and (v, w) already exist.
+         * 2. Points u, v, w are not collinear (area > 0).
+         * 3. The interior of triangle (u, v, w) does not already contain a blocked triangle
+         *    (so an outer bounding triangle doesn't double-score over inner sub-triangles).
+         */
+        function findNewlyFormedTriangles(u, v) {
+            const P = getPoint(u);
+            const Q = getPoint(v);
+            const newTris = [];
+
+            for (const R of state.points) {
+                const w = R.id;
+                if (w === u || w === v) continue;
+
+                if (hasSegment(u, w) && hasSegment(v, w)) {
+                    // Check non-collinear
+                    if (crossProduct(P, Q, R) === 0) continue;
+
+                    // Check if this triangle's interior already encloses an existing blocked triangle's centroid
+                    let enclosesBlocked = false;
+                    for (const existingTri of state.triangles) {
+                        const A = getPoint(existingTri.a);
+                        const B = getPoint(existingTri.b);
+                        const C = getPoint(existingTri.c);
+                        const centroid = {
+                            x: (A.x + B.x + C.x) / 3,
+                            y: (A.y + B.y + C.y) / 3
+                        };
+                        if (isPointStrictlyInTriangle(centroid, P, Q, R)) {
+                            enclosesBlocked = true;
+                            break;
+                        }
+                    }
+
+                    if (!enclosesBlocked) {
+                        const sorted = [u, v, w].sort((a, b) => a - b);
+                        newTris.push({ a: sorted[0], b: sorted[1], c: sorted[2] });
+                    }
+                }
+            }
+            return newTris;
+        }
+
+        /**
+         * Computes all remaining valid moves on the board.
+         */
+        function computeAllValidMoves() {
+            const moves = [];
+            for (let i = 1; i <= state.n; i++) {
+                for (let j = i + 1; j <= state.n; j++) {
+                    const res = validateMove(i, j);
+                    if (res.valid) {
+                        moves.push({ u: i, v: j });
+                    }
+                }
+            }
+            state.validMoves = moves;
+            return moves;
+        }
+
+        // ============================================================================
+        // Game Initialization & Point Generation
+        // ============================================================================
+
+        function initNewGame() {
+            // Read and sanitize parameters k, n, L
+            let k = parseInt(paramK.value, 10);
+            let n = parseInt(paramN.value, 10);
+            let L = parseInt(paramL.value, 10);
+
+            if (isNaN(k) || k < 2) k = 2;
+            if (k > 6) k = 6;
+            if (isNaN(L) || L < 6) L = 6;
+            if (L > 100) L = 100;
+
+            const maxPossiblePoints = L * L;
+            if (isNaN(n) || n < 3) n = 3;
+            if (n > Math.min(50, maxPossiblePoints)) n = Math.min(50, maxPossiblePoints);
+
+            paramK.value = k;
+            paramN.value = n;
+            paramL.value = L;
+
+            state.k = k;
+            state.n = n;
+            state.L = L;
+            state.segments = [];
+            state.triangles = [];
+            state.currentTurn = 0;
+            state.isBonusTurn = false;
+            state.selectedP1 = null;
+            state.selectedP2 = null;
+            state.hoveredPoint = null;
+            state.history = [];
+            state.gameOver = false;
+
+            // Initialize active players
+            state.players = [];
+            for (let i = 0; i < k; i++) {
+                state.players.push({
+                    ...PLAYER_PROFILES[i],
+                    score: 0,
+                    linesDrawn: 0
+                });
+            }
+
+            // Generate n random positive integer coordinates (1 <= X <= L, 1 <= Y <= L)
+            // With nice spacing heuristics so points aren't overly clumped when possible
+            const generated = [];
+            const usedSet = new Set();
+            let attempts = 0;
+
+            while (generated.length < n && attempts < 8000) {
+                attempts++;
+                const x = Math.floor(Math.random() * L) + 1; // Positive integer 1..L
+                const y = Math.floor(Math.random() * L) + 1; // Positive integer 1..L
+                const key = `${x},${y}`;
+                if (usedSet.has(key)) continue;
+
+                // Try to keep minimum distance >= 2 on earlier attempts for visual clarity
+                if (attempts < 1500 && L >= 15) {
+                    const tooClose = generated.some(pt => Math.hypot(pt.x - x, pt.y - y) < 2.2);
+                    if (tooClose) continue;
+                }
+
+                // Avoid 3 collinear points on early attempts so triangles can easily form
+                if (attempts < 800 && generated.length >= 2) {
+                    let collinearFound = false;
+                    for (let a = 0; a < generated.length; a++) {
+                        for (let b = a + 1; b < generated.length; b++) {
+                            if (crossProduct(generated[a], generated[b], { x, y }) === 0) {
+                                collinearFound = true;
+                                break;
+                            }
+                        }
+                        if (collinearFound) break;
+                    }
+                    if (collinearFound) continue;
+                }
+
+                usedSet.add(key);
+                generated.push({ x, y });
+            }
+
+            // Sort points gently by Y descending or X ascending so P1..Pn are easy to locate visually
+            generated.sort((a, b) => (a.x - b.x) || (a.y - b.y));
+            state.points = generated.map((pt, idx) => ({
+                id: idx + 1,
+                x: pt.x,
+                y: pt.y
+            }));
+
+            document.getElementById('gameover-modal').classList.add('hidden');
+
+            computeAllValidMoves();
+            populatePointSelects();
+            updateUI();
+            resizeCanvas();
+        }
+
+        // ============================================================================
+        // Gameplay Execution
+        // ============================================================================
+
+        function executeMove(u, v) {
+            if (state.gameOver) return;
+
+            const validation = validateMove(u, v);
+            if (!validation.valid) {
+                showFeedback(validation.reason, 'error');
+                return;
+            }
+
+            const minId = Math.min(u, v);
+            const maxId = Math.max(u, v);
+            const currentPlayer = state.players[state.currentTurn];
+
+            // 1. Check if this new segment completes any triangles with existing segments
+            const formedTriangles = findNewlyFormedTriangles(minId, maxId);
+
+            // 2. Add the new line segment
+            state.segments.push({
+                u: minId,
+                v: maxId,
+                player: state.currentTurn
+            });
+            currentPlayer.linesDrawn++;
+
+            // 3. Register newly formed blocked triangles & award points
+            const pointsEarned = formedTriangles.length;
+            for (const tri of formedTriangles) {
+                state.triangles.push({
+                    a: tri.a,
+                    b: tri.b,
+                    c: tri.c,
+                    player: state.currentTurn
+                });
+            }
+            currentPlayer.score += pointsEarned;
+
+            // 4. Record in move history
+            const P = getPoint(minId);
+            const Q = getPoint(maxId);
+            state.history.unshift({
+                turnNum: state.history.length + 1,
+                playerIndex: state.currentTurn,
+                u: minId,
+                v: maxId,
+                coordsText: `P${minId}(${P.x},${P.y}) ↔ P${maxId}(${Q.x},${Q.y})`,
+                pointsEarned,
+                trianglesFormed: formedTriangles.map(t => `△P${t.a}-P${t.b}-P${t.c}`)
+            });
+
+            // 5. Clear current selection
+            state.selectedP1 = null;
+            state.selectedP2 = null;
+            selectP1.value = '';
+            selectP2.value = '';
+
+            // 6. Determine next turn (Extra turn if pointsEarned > 0!)
+            if (pointsEarned > 0) {
+                state.isBonusTurn = true;
+                showFeedback(
+                    `🎉 ${currentPlayer.name} 連上 P${minId}-P${maxId} 並組成 ${pointsEarned} 個三角形 (+${pointsEarned}分)！獲得額外獎勵回合！`,
+                    'bonus'
+                );
+            } else {
+                state.isBonusTurn = false;
+                state.currentTurn = (state.currentTurn + 1) % state.k;
+                const nextPlayer = state.players[state.currentTurn];
+                showFeedback(
+                    `已連上 P${minId}-P${maxId}。現在輪到 ${nextPlayer.name} 進行回合。`,
+                    'info'
+                );
+            }
+
+            // 7. Recompute remaining valid moves & check Game Over
+            const remaining = computeAllValidMoves();
+            updateUI();
+            drawBoard();
+
+            if (remaining.length === 0) {
+                triggerGameOver();
+            }
+        }
+
+        function triggerGameOver() {
+            state.gameOver = true;
+            const sortedPlayers = [...state.players].sort((a, b) => b.score - a.score);
+            const topScore = sortedPlayers[0].score;
+            const winners = sortedPlayers.filter(p => p.score === topScore);
+
+            const winnerBanner = document.getElementById('winner-banner');
+            if (winners.length === 1) {
+                winnerBanner.textContent = `🏆 ${winners[0].name} 以 ${topScore} 分獲勝！`;
+            } else {
+                winnerBanner.textContent = `🤝 平手！${winners.map(w => w.name).join('、')} 同得 ${topScore} 分！`;
+            }
+
+            const listEl = document.getElementById('final-scores-list');
+            listEl.innerHTML = sortedPlayers.map((p, idx) => `
+                <div class="flex items-center justify-between px-4 py-2.5 rounded-xl bg-slate-800/90 border border-slate-700">
+                    <div class="flex items-center gap-2.5">
+                        <span class="text-xs font-bold text-slate-400 w-5">#${idx + 1}</span>
+                        <span class="w-3 h-3 rounded-full" style="background-color: ${p.color}"></span>
+                        <span class="font-bold text-sm text-white">${p.name}</span>
+                        <span class="text-xs text-slate-400">(連線 ${p.linesDrawn} 條)</span>
+                    </div>
+                    <span class="mono font-extrabold text-base" style="color: ${p.color}">${p.score} 分</span>
+                </div>
+            `).join('');
+
+            showFeedback('棋局已結束！場上已無任何可連的合法兩點。', 'bonus');
+            document.getElementById('gameover-modal').classList.remove('hidden');
+        }
+
+        // ============================================================================
+        // UI Synchronization & Feedback
+        // ============================================================================
+
+        function populatePointSelects() {
+            const optionsHtml = ['<option value="">-- 選擇點 --</option>']
+                .concat(state.points.map(pt => `<option value="${pt.id}">P${pt.id} (${pt.x}, ${pt.y})</option>`))
+                .join('');
+            selectP1.innerHTML = optionsHtml;
+            selectP2.innerHTML = optionsHtml;
+        }
+
+        function syncSelectionControls() {
+            selectP1.value = state.selectedP1 || '';
+            selectP2.value = state.selectedP2 || '';
+
+            if (state.selectedP1 && state.selectedP2) {
+                const res = validateMove(state.selectedP1, state.selectedP2);
+                btnConnect.disabled = !res.valid;
+                showFeedback(res.reason, res.valid ? 'valid' : 'error');
+            } else if (state.selectedP1) {
+                btnConnect.disabled = true;
+                const P = getPoint(state.selectedP1);
+                showFeedback(`已選取起點 P${P.id}(${P.x},${P.y})，請再選擇第二個點。`, 'info');
+            } else {
+                btnConnect.disabled = true;
+            }
+            renderPointsList();
+            drawBoard();
+        }
+
+        function showFeedback(msg, type = 'info') {
+            moveFeedback.className = 'mb-3 px-3 py-2 rounded-xl text-xs font-medium border flex items-center gap-2 min-h-[36px] transition ';
+            if (type === 'error') {
+                moveFeedback.className += 'bg-rose-500/15 text-rose-300 border-rose-500/40';
+            } else if (type === 'valid') {
+                moveFeedback.className += 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40';
+            } else if (type === 'bonus') {
+                moveFeedback.className += 'bg-amber-500/20 text-amber-200 border-amber-500/50';
+            } else {
+                moveFeedback.className += 'bg-slate-800/70 text-slate-300 border-slate-700/60';
+            }
+            moveFeedback.innerHTML = `<span>${msg}</span>`;
+        }
+
+        function updateUI() {
+            // Update Top Turn Badge
+            const curPlayer = state.players[state.currentTurn];
+            const turnBadge = document.getElementById('turn-badge');
+            const turnDot = document.getElementById('turn-dot');
+            const turnName = document.getElementById('turn-player-name');
+            const bonusBadge = document.getElementById('bonus-turn-badge');
+
+            turnName.textContent = curPlayer.name;
+            turnDot.style.backgroundColor = curPlayer.color;
+            turnBadge.style.borderColor = curPlayer.color;
+            turnBadge.style.color = curPlayer.color;
+            turnBadge.style.backgroundColor = curPlayer.fill;
+
+            if (state.isBonusTurn) {
+                bonusBadge.classList.remove('hidden');
+            } else {
+                bonusBadge.classList.add('hidden');
+            }
+
+            // Stats
+            document.getElementById('stat-segments').textContent = state.segments.length;
+            document.getElementById('stat-triangles').textContent = state.triangles.length;
+            document.getElementById('stat-valid-moves').textContent = state.validMoves.length;
+            document.getElementById('points-count-label').textContent = state.n;
+            document.getElementById('history-count-label').textContent = state.history.length;
+
+            // Render Scoreboard
+            scoreboardContainer.innerHTML = state.players.map((p, idx) => {
+                const isTurn = (idx === state.currentTurn) && !state.gameOver;
+                return `
+                    <div class="p-3 rounded-xl border transition flex items-center justify-between ${
+                        isTurn ? 'bg-slate-800/90 active-turn-card' : 'bg-slate-800/40 border-slate-800 opacity-85'
+                    }" style="${isTurn ? `border-color: ${p.color}` : ''}">
+                        <div class="flex items-center gap-2.5">
+                            <span class="w-3.5 h-3.5 rounded-full shadow-sm" style="background-color: ${p.color}"></span>
+                            <div>
+                                <div class="text-xs font-bold text-white flex items-center gap-1.5">
+                                    ${p.name}
+                                    ${isTurn ? '<span class="text-[10px] px-1.5 py-0.2 bg-sky-500/20 text-sky-300 rounded">思考中</span>' : ''}
+                                </div>
+                                <div class="text-[11px] text-slate-400">已連 ${p.linesDrawn} 線</div>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <div class="mono text-lg font-extrabold" style="color: ${p.color}">${p.score}</div>
+                            <div class="text-[10px] text-slate-400">三角形得分</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            renderPointsList();
+            renderHistoryList();
+        }
+
+        function renderPointsList() {
+            panelPoints.innerHTML = state.points.map(pt => {
+                const isSel1 = state.selectedP1 === pt.id;
+                const isSel2 = state.selectedP2 === pt.id;
+                let badgeClass = 'bg-slate-800/70 border-slate-700/70 text-slate-300 hover:border-slate-500';
+                if (isSel1 || isSel2) {
+                    badgeClass = 'bg-sky-500/20 border-sky-400 text-white ring-1 ring-sky-400';
+                }
+                return `
+                    <button data-point-id="${pt.id}" class="point-chip px-2.5 py-1.5 rounded-xl border text-left transition flex items-center justify-between ${badgeClass}">
+                        <span class="mono font-bold text-xs text-sky-400">P${pt.id}</span>
+                        <span class="mono text-[11px] text-slate-300">(${pt.x}, ${pt.y})</span>
+                    </button>
+                `;
+            }).join('');
+
+            document.querySelectorAll('.point-chip').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const pid = parseInt(btn.getAttribute('data-point-id'), 10);
+                    handlePointClick(pid);
+                });
+            });
+        }
+
+        function renderHistoryList() {
+            if (state.history.length === 0) {
+                panelHistory.innerHTML = `<div class="text-center text-slate-500 py-8">尚無連線紀錄，請由玩家 A 開始第一手！</div>`;
+                return;
+            }
+            panelHistory.innerHTML = state.history.map(item => {
+                const p = state.players[item.playerIndex];
+                return `
+                    <div class="p-2 rounded-xl bg-slate-800/60 border border-slate-800 flex items-center justify-between gap-2">
+                        <div class="flex items-center gap-2">
+                            <span class="mono text-[10px] text-slate-500">#${item.turnNum}</span>
+                            <span class="w-2.5 h-2.5 rounded-full" style="background-color: ${p.color}"></span>
+                            <span class="font-bold text-slate-200">${p.name}</span>
+                            <span class="mono text-slate-300">${item.coordsText}</span>
+                        </div>
+                        ${
+                            item.pointsEarned > 0
+                                ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">+${item.pointsEarned}分 (${item.trianglesFormed.join(', ')})</span>`
+                                : `<span class="text-[10px] text-slate-500">無封鎖</span>`
+                        }
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function handlePointClick(pid) {
+            if (state.gameOver) return;
+
+            if (state.selectedP1 === pid) {
+                state.selectedP1 = state.selectedP2;
+                state.selectedP2 = null;
+            } else if (state.selectedP2 === pid) {
+                state.selectedP2 = null;
+            } else if (!state.selectedP1) {
+                state.selectedP1 = pid;
+            } else if (!state.selectedP2) {
+                state.selectedP2 = pid;
+            } else {
+                state.selectedP1 = pid;
+                state.selectedP2 = null;
+            }
+            syncSelectionControls();
+        }
+
+        // ============================================================================
+        // HTML5 Canvas Coordinate Grid Renderer
+        // ============================================================================
+
+        function getCanvasGeometry() {
+            const dpr = window.devicePixelRatio || 1;
+            const width = canvas.width / dpr;
+            const height = canvas.height / dpr;
+            const padLeft = 44;
+            const padBottom = 40;
+            const padTop = 28;
+            const padRight = 28;
+            const plotW = width - padLeft - padRight;
+            const plotH = height - padTop - padBottom;
+            return { width, height, padLeft, padBottom, padTop, padRight, plotW, plotH };
+        }
+
+        /**
+         * Converts Cartesian coordinate (x, y) in [0, L] to Canvas pixel (cx, cy)
+         */
+        function gridToPixel(x, y) {
+            const g = getCanvasGeometry();
+            const cx = g.padLeft + (x / state.L) * g.plotW;
+            const cy = g.padTop + ((state.L - y) / state.L) * g.plotH;
+            return { cx, cy };
+        }
+
+        /**
+         * Converts Canvas pixel (cx, cy) to nearest integer grid coordinate
+         */
+        function pixelToGrid(cx, cy) {
+            const g = getCanvasGeometry();
+            const gx = Math.round(((cx - g.padLeft) / g.plotW) * state.L);
+            const gy = Math.round(state.L - ((cy - g.padTop) / g.plotH) * state.L);
+            return {
+                x: Math.max(0, Math.min(state.L, gx)),
+                y: Math.max(0, Math.min(state.L, gy))
+            };
+        }
+
+        function resizeCanvas() {
+            const rect = canvas.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            drawBoard();
+        }
+
+        function drawBoard() {
+            const g = getCanvasGeometry();
+            ctx.clearRect(0, 0, g.width, g.height);
+
+            // 1. Background
+            ctx.fillStyle = '#0b1120';
+            ctx.fillRect(0, 0, g.width, g.height);
+
+            // 2. Grid lines & Axis labels (0 <= X <= L, 0 <= Y <= L)
+            const step = state.L <= 20 ? 1 : state.L <= 40 ? 2 : 5;
+            const majorStep = state.L <= 20 ? 5 : 10;
+
+            for (let i = 0; i <= state.L; i++) {
+                const pX = gridToPixel(i, 0);
+                const pY = gridToPixel(0, i);
+
+                // Vertical grid line
+                ctx.beginPath();
+                ctx.moveTo(pX.cx, g.padTop);
+                ctx.lineTo(pX.cx, g.height - g.padBottom);
+                ctx.strokeStyle = (i % majorStep === 0) ? 'rgba(71, 85, 105, 0.45)' : 'rgba(30, 41, 59, 0.65)';
+                ctx.lineWidth = (i % majorStep === 0) ? 1.2 : 0.75;
+                ctx.stroke();
+
+                // Horizontal grid line
+                ctx.beginPath();
+                ctx.moveTo(g.padLeft, pY.cy);
+                ctx.lineTo(g.width - g.padRight, pY.cy);
+                ctx.strokeStyle = (i % majorStep === 0) ? 'rgba(71, 85, 105, 0.45)' : 'rgba(30, 41, 59, 0.65)';
+                ctx.lineWidth = (i % majorStep === 0) ? 1.2 : 0.75;
+                ctx.stroke();
+
+                // Axis numbers
+                if (i % majorStep === 0 || i === state.L) {
+                    ctx.fillStyle = '#64748b';
+                    ctx.font = '500 10px "JetBrains Mono", monospace';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'top';
+                    ctx.fillText(i.toString(), pX.cx, g.height - g.padBottom + 8);
+
+                    ctx.textAlign = 'right';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(i.toString(), g.padLeft - 8, pY.cy);
+                }
+            }
+
+            // Main X and Y Axes (X=0, Y=0)
+            const origin = gridToPixel(0, 0);
+            const topY = gridToPixel(0, state.L);
+            const rightX = gridToPixel(state.L, 0);
+
+            ctx.beginPath();
+            ctx.moveTo(origin.cx, topY.cy);
+            ctx.lineTo(origin.cx, origin.cy);
+            ctx.lineTo(rightX.cx, origin.cy);
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Axis Titles
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '700 11px "JetBrains Mono", monospace';
+            ctx.textAlign = 'right';
+            ctx.fillText('X', g.width - 8, origin.cy - 4);
+            ctx.textAlign = 'left';
+            ctx.fillText('Y', origin.cx + 6, 14);
+
+            // 3. Shaded Blocked Triangles (封鎖區域)
+            for (const tri of state.triangles) {
+                const A = gridToPixel(getPoint(tri.a).x, getPoint(tri.a).y);
+                const B = gridToPixel(getPoint(tri.b).x, getPoint(tri.b).y);
+                const C = gridToPixel(getPoint(tri.c).x, getPoint(tri.c).y);
+                const owner = state.players[tri.player];
+
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(A.cx, A.cy);
+                ctx.lineTo(B.cx, B.cy);
+                ctx.lineTo(C.cx, C.cy);
+                ctx.closePath();
+                ctx.fillStyle = owner.fill;
+                ctx.fill();
+
+                // Diagonal hatch pattern effect to emphasize "Blocked Region"
+                ctx.strokeStyle = owner.color;
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                // Draw owner badge at centroid of triangle
+                const centerCx = (A.cx + B.cx + C.cx) / 3;
+                const centerCy = (A.cy + B.cy + C.cy) / 3;
+                ctx.fillStyle = '#0f172a';
+                ctx.beginPath();
+                ctx.arc(centerCx, centerCy, 9, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = owner.color;
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                ctx.fillStyle = owner.color;
+                ctx.font = '700 10px "JetBrains Mono", monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(owner.code, centerCx, centerCy + 0.5);
+                ctx.restore();
+            }
+
+            // 4. Drawn Line Segments
+            for (const seg of state.segments) {
+                const P = gridToPixel(getPoint(seg.u).x, getPoint(seg.u).y);
+                const Q = gridToPixel(getPoint(seg.v).x, getPoint(seg.v).y);
+                const owner = state.players[seg.player];
+
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(P.cx, P.cy);
+                ctx.lineTo(Q.cx, Q.cy);
+                ctx.strokeStyle = owner.color;
+                ctx.lineWidth = 3;
+                ctx.lineCap = 'round';
+                ctx.shadowColor = owner.color;
+                ctx.shadowBlur = 6;
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // 5. Preview Line (when 1 point is selected & hovering another, or 2 points selected)
+            const previewP1 = state.selectedP1;
+            const previewP2 = state.selectedP2 || state.hoveredPoint;
+            if (previewP1 && previewP2 && previewP1 !== previewP2) {
+                const P = gridToPixel(getPoint(previewP1).x, getPoint(previewP1).y);
+                const Q = gridToPixel(getPoint(previewP2).x, getPoint(previewP2).y);
+                const check = validateMove(previewP1, previewP2);
+
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(P.cx, P.cy);
+                ctx.lineTo(Q.cx, Q.cy);
+                ctx.setLineDash([6, 6]);
+                ctx.lineWidth = 2.5;
+                ctx.strokeStyle = check.valid ? '#10b981' : '#f43f5e';
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // 6. Coordinate Points (P1 .. Pn)
+            // Compute valid partner set if 1 point is selected and hints are enabled
+            const validTargets = new Set();
+            if (state.showHints && state.selectedP1 && !state.selectedP2) {
+                for (let j = 1; j <= state.n; j++) {
+                    if (j !== state.selectedP1 && validateMove(state.selectedP1, j).valid) {
+                        validTargets.add(j);
+                    }
+                }
+            }
+
+            for (const pt of state.points) {
+                const { cx, cy } = gridToPixel(pt.x, pt.y);
+                const isSel = (state.selectedP1 === pt.id || state.selectedP2 === pt.id);
+                const isHov = (state.hoveredPoint === pt.id);
+                const isValidTarget = validTargets.has(pt.id);
+
+                ctx.save();
+
+                // Outer glow for selected or hovered points
+                if (isSel || isHov) {
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, 13, 0, Math.PI * 2);
+                    ctx.fillStyle = isSel ? 'rgba(56, 189, 248, 0.3)' : 'rgba(255, 255, 255, 0.2)';
+                    ctx.fill();
+                } else if (isValidTarget) {
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, 10, 0, Math.PI * 2);
+                    ctx.strokeStyle = 'rgba(16, 185, 129, 0.65)';
+                    ctx.lineWidth = 1.5;
+                    ctx.stroke();
+                }
+
+                // Point circle
+                ctx.beginPath();
+                ctx.arc(cx, cy, isSel ? 7.5 : 6, 0, Math.PI * 2);
+                ctx.fillStyle = isSel ? '#38bdf8' : isHov ? '#f8fafc' : '#1e293b';
+                ctx.fill();
+                ctx.lineWidth = 2.2;
+                ctx.strokeStyle = isSel ? '#ffffff' : isValidTarget ? '#34d399' : '#94a3b8';
+                ctx.stroke();
+
+                // Label badge (P1 (x,y))
+                const labelText = state.showCoords ? `P${pt.id}(${pt.x},${pt.y})` : `P${pt.id}`;
+                ctx.font = '600 11px "JetBrains Mono", monospace';
+                const textWidth = ctx.measureText(labelText).width;
+                const offsetX = cx + 10 + textWidth > g.width - 6 ? -(textWidth + 10) : 10;
+                const offsetY = cy - 12 < 12 ? 14 : -10;
+
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                ctx.beginPath();
+                ctx.roundRect(cx + offsetX - 3, cy + offsetY - 9, textWidth + 6, 16, 4);
+                ctx.fill();
+
+                ctx.fillStyle = isSel ? '#38bdf8' : '#e2e8f0';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(labelText, cx + offsetX, cy + offsetY - 1);
+
+                ctx.restore();
+            }
+        }
+
+        // ============================================================================
+        // Event Listeners (Mouse, Touch, Controls)
+        // ============================================================================
+
+        function findNearestPointAtPixel(px, py) {
+            let bestId = null;
+            let bestDist = 22; // Hit radius in pixels
+            for (const pt of state.points) {
+                const { cx, cy } = gridToPixel(pt.x, pt.y);
+                const d = Math.hypot(cx - px, cy - py);
+                if (d < bestDist) {
+                    bestDist = d;
+                    bestId = pt.id;
+                }
+            }
+            return bestId;
+        }
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const px = e.clientX - rect.left;
+            const py = e.clientY - rect.top;
+
+            const nearestId = findNearestPointAtPixel(px, py);
+            const gridPos = pixelToGrid(px, py);
+            const tooltip = document.getElementById('canvas-tooltip');
+            tooltip.classList.remove('hidden');
+
+            if (nearestId) {
+                const pt = getPoint(nearestId);
+                tooltip.innerHTML = `<span class="text-sky-400 font-bold">P${pt.id}</span> 坐標: (${pt.x}, ${pt.y})`;
+                canvas.style.cursor = 'pointer';
+            } else {
+                tooltip.textContent = `網格坐標: (${gridPos.x}, ${gridPos.y})`;
+                canvas.style.cursor = 'crosshair';
+            }
+
+            if (state.hoveredPoint !== nearestId) {
+                state.hoveredPoint = nearestId;
+                drawBoard();
+            }
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+            document.getElementById('canvas-tooltip').classList.add('hidden');
+            if (state.hoveredPoint !== null) {
+                state.hoveredPoint = null;
+                drawBoard();
+            }
+        });
+
+        canvas.addEventListener('click', (e) => {
+            if (state.gameOver) return;
+            const rect = canvas.getBoundingClientRect();
+            const px = e.clientX - rect.left;
+            const py = e.clientY - rect.top;
+            const clickedId = findNearestPointAtPixel(px, py);
+
+            if (clickedId) {
+                // If user already selected P1 and now clicks a valid P2 directly on canvas,
+                // select it and let them see/confirm or immediately connect if they double-click
+                if (state.selectedP1 && !state.selectedP2 && state.selectedP1 !== clickedId) {
+                    const check = validateMove(state.selectedP1, clickedId);
+                    if (check.valid) {
+                        executeMove(state.selectedP1, clickedId);
+                        return;
+                    } else {
+                        state.selectedP2 = clickedId;
+                        syncSelectionControls();
+                        return;
+                    }
+                }
+                handlePointClick(clickedId);
+            }
+        });
+
+        // Dropdown changes
+        selectP1.addEventListener('change', () => {
+            state.selectedP1 = selectP1.value ? parseInt(selectP1.value, 10) : null;
+            syncSelectionControls();
+        });
+
+        selectP2.addEventListener('change', () => {
+            state.selectedP2 = selectP2.value ? parseInt(selectP2.value, 10) : null;
+            syncSelectionControls();
+        });
+
+        btnConnect.addEventListener('click', () => {
+            if (state.selectedP1 && state.selectedP2) {
+                executeMove(state.selectedP1, state.selectedP2);
+            }
+        });
+
+        btnClearSel.addEventListener('click', () => {
+            state.selectedP1 = null;
+            state.selectedP2 = null;
+            syncSelectionControls();
+            showFeedback('已清除選取，請重新選擇兩點。', 'info');
+        });
+
+        // Hint button: highlights a random valid move (prioritizing triangle-forming moves!)
+        document.getElementById('btn-hint-move').addEventListener('click', () => {
+            if (state.gameOver || state.validMoves.length === 0) return;
+
+            // Check if any valid move forms a triangle immediately
+            let chosenMove = null;
+            for (const m of state.validMoves) {
+                if (findNewlyFormedTriangles(m.u, m.v).length > 0) {
+                    chosenMove = m;
+                    break;
+                }
+            }
+            if (!chosenMove) {
+                chosenMove = state.validMoves[Math.floor(Math.random() * state.validMoves.length)];
+            }
+
+            state.selectedP1 = chosenMove.u;
+            state.selectedP2 = chosenMove.v;
+            syncSelectionControls();
+        });
+
+        // Visual toggles
+        document.getElementById('toggle-coords').addEventListener('change', (e) => {
+            state.showCoords = e.target.checked;
+            drawBoard();
+        });
+
+        document.getElementById('toggle-hints').addEventListener('change', (e) => {
+            state.showHints = e.target.checked;
+            drawBoard();
+        });
+
+        // Tabs switching
+        const tabBtnPoints = document.getElementById('tab-btn-points');
+        const tabBtnHistory = document.getElementById('tab-btn-history');
+        tabBtnPoints.addEventListener('click', () => {
+            panelPoints.classList.remove('hidden');
+            panelHistory.classList.add('hidden');
+            tabBtnPoints.className = 'px-3 py-1 rounded-lg text-xs font-bold bg-sky-500/20 text-sky-400 border border-sky-500/30';
+            tabBtnHistory.className = 'px-3 py-1 rounded-lg text-xs font-bold text-slate-400 hover:text-slate-200';
+        });
+        tabBtnHistory.addEventListener('click', () => {
+            panelHistory.classList.remove('hidden');
+            panelPoints.classList.add('hidden');
+            tabBtnHistory.className = 'px-3 py-1 rounded-lg text-xs font-bold bg-sky-500/20 text-sky-400 border border-sky-500/30';
+            tabBtnPoints.className = 'px-3 py-1 rounded-lg text-xs font-bold text-slate-400 hover:text-slate-200';
+        });
+
+        // Modals & New Game Buttons
+        document.getElementById('btn-new-game').addEventListener('click', initNewGame);
+        document.getElementById('btn-play-again').addEventListener('click', initNewGame);
+        document.getElementById('btn-close-gameover').addEventListener('click', () => {
+            document.getElementById('gameover-modal').classList.add('hidden');
+        });
+
+        const rulesModal = document.getElementById('rules-modal');
+        document.getElementById('btn-rules').addEventListener('click', () => rulesModal.classList.remove('hidden'));
+        document.getElementById('btn-close-rules').addEventListener('click', () => rulesModal.classList.add('hidden'));
+        document.getElementById('btn-Confirm-rules').addEventListener('click', () => rulesModal.classList.add('hidden'));
+
+        window.addEventListener('resize', resizeCanvas);
+
+        // Start game on load
+        window.onload = function () {
+            initNewGame();
+        };
+    </script>
+</body>
+</html>
