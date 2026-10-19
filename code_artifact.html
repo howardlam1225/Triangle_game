@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>直角坐標三角封鎖棋 | Triangle Lock Grid</title>
+    <title>直角坐標三角封鎖棋 | Triangle Lock Grid (Online P2P)</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
     <style>
         body {
@@ -101,7 +102,7 @@
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                     </svg>
-                    生成新棋局
+                    <span id="btn-new-game-text">生成新棋局</span>
                 </button>
                 <button id="btn-rules" class="px-2.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs sm:text-sm font-medium rounded-lg transition">
                     規則說明
@@ -109,6 +110,81 @@
             </div>
         </div>
     </header>
+
+    <!-- Online Multiplayer P2P Lobby & Status Bar -->
+    <section class="bg-slate-900/60 border-b border-slate-800/80 px-4 py-2.5">
+        <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+            <!-- Left: Mode Switcher & Role Status -->
+            <div class="flex flex-wrap items-center gap-2.5">
+                <div class="inline-flex rounded-xl bg-slate-950 p-1 border border-slate-800">
+                    <button id="mode-btn-local" class="px-3 py-1 rounded-lg text-xs font-bold bg-sky-500 text-white shadow transition">
+                        單機同屏對戰
+                    </button>
+                    <button id="mode-btn-online" class="px-3 py-1 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        線上房間連線 (PeerJS)
+                    </button>
+                </div>
+
+                <!-- Online Status Pill -->
+                <div id="online-status-pill" class="hidden items-center gap-2 px-3 py-1 rounded-xl bg-slate-800/90 border border-slate-700 text-xs">
+                    <span id="net-status-dot" class="w-2 h-2 rounded-full bg-slate-400"></span>
+                    <span id="net-status-text" class="text-slate-300 font-medium">尚未連線</span>
+                    <span id="my-role-badge" class="hidden px-2 py-0.5 rounded-md font-bold mono bg-sky-500/20 text-sky-300 border border-sky-500/40"></span>
+                </div>
+            </div>
+
+            <!-- Right: Host / Join Controls (Visible when Online Mode active) -->
+            <div id="online-controls-area" class="hidden flex-wrap items-center gap-2">
+                <!-- Disconnected Controls: Create or Join -->
+                <div id="lobby-setup-controls" class="flex flex-wrap items-center gap-2">
+                    <button id="btn-host-room" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow transition flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                        </svg>
+                        建立新房間 (當房主)
+                    </button>
+                    <span class="text-xs text-slate-500 font-bold">或</span>
+                    <div class="flex items-center bg-slate-950 border border-slate-700 rounded-xl overflow-hidden focus-within:border-sky-500">
+                        <input id="input-room-code" type="text" maxlength="6" placeholder="輸入6碼房號" 
+                            class="w-28 bg-transparent px-2.5 py-1 text-xs mono uppercase text-white placeholder-slate-500 focus:outline-none">
+                        <button id="btn-join-room" class="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold transition">
+                            加入房間
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Connected Room Info: Code, Copy Buttons, Quick Emoji, Leave -->
+                <div id="lobby-connected-controls" class="hidden flex-wrap items-center gap-2">
+                    <div class="flex items-center gap-1.5 bg-slate-950 border border-slate-700 px-2.5 py-1 rounded-xl">
+                        <span class="text-[11px] text-slate-400">房號:</span>
+                        <span id="display-room-code" class="mono text-sm font-extrabold text-amber-400 tracking-wider">------</span>
+                        <button id="btn-copy-code" class="ml-1 px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] rounded-md border border-slate-700 transition" title="複製6碼房號">
+                            複製房號
+                        </button>
+                        <button id="btn-copy-link" class="px-2 py-0.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 text-[11px] font-semibold rounded-md border border-sky-500/30 transition" title="複製可直接點開加入的網址">
+                            複製邀請連結
+                        </button>
+                    </div>
+
+                    <!-- Quick Emoji Reaction Buttons -->
+                    <div class="flex items-center gap-1 bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded-xl">
+                        <button data-emoji="👍" class="emoji-btn hover:scale-125 transition px-1 py-0.5 text-sm" title="發送 👍">👍</button>
+                        <button data-emoji="🤔" class="emoji-btn hover:scale-125 transition px-1 py-0.5 text-sm" title="發送 🤔">🤔</button>
+                        <button data-emoji="🔥" class="emoji-btn hover:scale-125 transition px-1 py-0.5 text-sm" title="發送 🔥">🔥</button>
+                        <button data-emoji="🎉" class="emoji-btn hover:scale-125 transition px-1 py-0.5 text-sm" title="發送 🎉">🎉</button>
+                    </div>
+
+                    <button id="btn-leave-room" class="px-2.5 py-1 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs font-semibold rounded-xl transition">
+                        離開房間
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Floating Toast / Emoji Reaction Banner -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
     <!-- Main Content Layout -->
     <main class="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -125,6 +201,9 @@
                     </div>
                     <span id="bonus-turn-badge" class="hidden px-2.5 py-0.5 text-xs font-bold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-bounce">
                         ★ 得分獎勵回合！
+                    </span>
+                    <span id="online-turn-lock-badge" class="hidden px-2.5 py-0.5 text-xs font-semibold rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                        等待對手行動...
                     </span>
                 </div>
 
@@ -346,6 +425,19 @@
             showHints: true
         };
 
+        // Online Multiplayer (PeerJS WebRTC) State
+        const net = {
+            isOnline: false,       // false = Local Pass & Play, true = PeerJS Online Mode
+            role: null,            // 'host' | 'client' | null
+            peer: null,            // PeerJS instance
+            roomCode: '',          // 6-character alphanumeric room code
+            myPlayerIndex: 0,      // 0 for Host (Player A), 1 for 1st client (Player B), etc. (-1 for spectator)
+            hostConn: null,        // Client's DataConnection to Host
+            clients: []            // Host's list of { conn, peerId, playerIndex, name }
+        };
+
+        const PEER_PREFIX = 'TLG-ROOM-2026-';
+
         // DOM References
         const canvas = document.getElementById('game-canvas');
         const ctx = canvas.getContext('2d');
@@ -360,6 +452,440 @@
         const scoreboardContainer = document.getElementById('scoreboard-container');
         const panelPoints = document.getElementById('panel-points');
         const panelHistory = document.getElementById('panel-history');
+
+        // ============================================================================
+        // Utility: Toast Notification & Clipboard Copy
+        // ============================================================================
+
+        function showToast(message, style = 'info') {
+            const container = document.getElementById('toast-container');
+            const el = document.createElement('div');
+            let colorClass = 'bg-slate-900/95 border-slate-700 text-slate-100';
+            if (style === 'success') colorClass = 'bg-emerald-950/95 border-emerald-500/50 text-emerald-200';
+            if (style === 'warn') colorClass = 'bg-amber-950/95 border-amber-500/50 text-amber-200';
+            if (style === 'emoji') colorClass = 'bg-indigo-950/95 border-indigo-500/50 text-white text-base';
+
+            el.className = `px-4 py-2.5 rounded-xl border shadow-2xl backdrop-blur-md text-xs font-semibold transition-all duration-300 transform translate-y-2 opacity-0 ${colorClass}`;
+            el.textContent = message;
+            container.appendChild(el);
+
+            requestAnimationFrame(() => {
+                el.classList.remove('translate-y-2', 'opacity-0');
+            });
+
+            setTimeout(() => {
+                el.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => el.remove(), 300);
+            }, 3200);
+        }
+
+        function copyTextToClipboard(text, successMsg) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                showToast(successMsg, 'success');
+            } catch (err) {
+                showToast('複製失敗，請手動複製: ' + text, 'warn');
+            }
+            document.body.removeChild(textarea);
+        }
+
+        /**
+         * Returns true if the local user is allowed to make a move right now
+         */
+        function canLocalPlayerAct() {
+            if (state.gameOver) return false;
+            if (!net.isOnline || !net.role) return true; // Local Pass & Play mode
+            return state.currentTurn === net.myPlayerIndex;
+        }
+
+        // ============================================================================
+        // PeerJS Online Multiplayer Engine (Host-Authoritative P2P)
+        // ============================================================================
+
+        function generateRoomCode() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            let code = '';
+            for (let i = 0; i < 6; i++) {
+                code += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return code;
+        }
+
+        function setOnlineModeUI(online) {
+            net.isOnline = online;
+            const btnLocal = document.getElementById('mode-btn-local');
+            const btnOnline = document.getElementById('mode-btn-online');
+            const statusPill = document.getElementById('online-status-pill');
+            const controlsArea = document.getElementById('online-controls-area');
+
+            if (online) {
+                btnOnline.className = 'px-3 py-1 rounded-lg text-xs font-bold bg-sky-500 text-white shadow transition flex items-center gap-1.5';
+                btnLocal.className = 'px-3 py-1 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition';
+                statusPill.classList.remove('hidden');
+                statusPill.classList.add('flex');
+                controlsArea.classList.remove('hidden');
+                controlsArea.classList.add('flex');
+            } else {
+                leaveRoom();
+                btnLocal.className = 'px-3 py-1 rounded-lg text-xs font-bold bg-sky-500 text-white shadow transition';
+                btnOnline.className = 'px-3 py-1 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition flex items-center gap-1.5';
+                statusPill.classList.add('hidden');
+                statusPill.classList.remove('flex');
+                controlsArea.classList.add('hidden');
+                controlsArea.classList.remove('flex');
+            }
+            updateNetworkControlsVisibility();
+            updateUI();
+        }
+
+        function updateNetworkControlsVisibility() {
+            const setupControls = document.getElementById('lobby-setup-controls');
+            const connectedControls = document.getElementById('lobby-connected-controls');
+            const statusDot = document.getElementById('net-status-dot');
+            const statusText = document.getElementById('net-status-text');
+            const roleBadge = document.getElementById('my-role-badge');
+            const btnNewGame = document.getElementById('btn-new-game');
+
+            if (!net.role) {
+                setupControls.classList.remove('hidden');
+                setupControls.classList.add('flex');
+                connectedControls.classList.add('hidden');
+                connectedControls.classList.remove('flex');
+                statusDot.className = 'w-2 h-2 rounded-full bg-slate-400';
+                statusText.textContent = '請建立或加入房間';
+                roleBadge.classList.add('hidden');
+                paramK.disabled = false;
+                paramN.disabled = false;
+                paramL.disabled = false;
+                btnNewGame.disabled = false;
+                btnNewGame.classList.remove('opacity-50', 'cursor-not-allowed');
+            } else {
+                setupControls.classList.add('hidden');
+                setupControls.classList.remove('flex');
+                connectedControls.classList.remove('hidden');
+                connectedControls.classList.add('flex');
+                document.getElementById('display-room-code').textContent = net.roomCode;
+
+                statusDot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-ping';
+                if (net.role === 'host') {
+                    const connectedCount = net.clients.length + 1;
+                    statusText.textContent = `房主連線中 (${connectedCount}/${state.k} 人在線)`;
+                    paramK.disabled = false;
+                    paramN.disabled = false;
+                    paramL.disabled = false;
+                    btnNewGame.disabled = false;
+                    btnNewGame.classList.remove('opacity-50', 'cursor-not-allowed');
+                } else {
+                    statusText.textContent = `已連線至房間`;
+                    paramK.disabled = true;
+                    paramN.disabled = true;
+                    paramL.disabled = true;
+                    btnNewGame.disabled = true;
+                    btnNewGame.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+
+                roleBadge.classList.remove('hidden');
+                if (net.myPlayerIndex >= 0 && net.myPlayerIndex < state.k) {
+                    const myProfile = PLAYER_PROFILES[net.myPlayerIndex];
+                    roleBadge.textContent = `你是: ${myProfile.name}`;
+                    roleBadge.style.color = myProfile.color;
+                    roleBadge.style.borderColor = myProfile.color;
+                } else {
+                    roleBadge.textContent = '你是: 觀戰者';
+                }
+            }
+        }
+
+        function hostRoom() {
+            leaveRoom();
+            const code = generateRoomCode();
+            const fullPeerId = PEER_PREFIX + code;
+
+            document.getElementById('net-status-text').textContent = '正在建立房間...';
+            const peer = new Peer(fullPeerId);
+
+            peer.on('open', () => {
+                net.peer = peer;
+                net.role = 'host';
+                net.roomCode = code;
+                net.myPlayerIndex = 0; // Host is always Player A (index 0)
+                net.clients = [];
+
+                // Ensure a fresh board is ready and synced
+                initNewGame();
+                updateNetworkControlsVisibility();
+                updateUI();
+                showToast(`房間 ${code} 建立成功！快複製邀請連結給朋友吧！`, 'success');
+            });
+
+            peer.on('connection', (conn) => {
+                setupHostClientConnection(conn);
+            });
+
+            peer.on('error', (err) => {
+                showToast('連線發生錯誤: ' + err.type, 'warn');
+                leaveRoom();
+            });
+        }
+
+        function setupHostClientConnection(conn) {
+            conn.on('open', () => {
+                // Assign lowest available player slot (1 .. k-1), or -1 if spectator
+                const usedIndices = new Set([0, ...net.clients.map(c => c.playerIndex)]);
+                let assignedIndex = -1;
+                for (let i = 1; i < state.k; i++) {
+                    if (!usedIndices.has(i)) {
+                        assignedIndex = i;
+                        break;
+                    }
+                }
+
+                const clientObj = {
+                    conn,
+                    peerId: conn.peer,
+                    playerIndex: assignedIndex
+                };
+                net.clients.push(clientObj);
+
+                const roleName = assignedIndex >= 0 ? PLAYER_PROFILES[assignedIndex].name : '觀戰者';
+                showToast(`🎉 新玩家已加入房間，分配為：${roleName}`, 'success');
+
+                // Send initial state and assigned slot to this client, and broadcast roster update
+                broadcastFullState();
+                updateNetworkControlsVisibility();
+                updateUI();
+            });
+
+            conn.on('data', (data) => {
+                handleHostReceivedData(conn, data);
+            });
+
+            conn.on('close', () => {
+                const idx = net.clients.findIndex(c => c.conn === conn);
+                if (idx !== -1) {
+                    const leftRole = net.clients[idx].playerIndex >= 0
+                        ? PLAYER_PROFILES[net.clients[idx].playerIndex].name
+                        : '觀戰者';
+                    net.clients.splice(idx, 1);
+                    showToast(`${leftRole} 已離開房間`, 'warn');
+                    broadcastFullState();
+                    updateNetworkControlsVisibility();
+                    updateUI();
+                }
+            });
+        }
+
+        function joinRoom(rawCode) {
+            const code = (rawCode || '').trim().toUpperCase();
+            if (code.length !== 6) {
+                showToast('請輸入完整的 6 碼房間代碼！', 'warn');
+                return;
+            }
+
+            leaveRoom();
+            setOnlineModeUI(true);
+            document.getElementById('net-status-text').textContent = `正在連線至房間 ${code}...`;
+
+            const peer = new Peer();
+            peer.on('open', () => {
+                net.peer = peer;
+                const conn = peer.connect(PEER_PREFIX + code, { reliable: true });
+
+                conn.on('open', () => {
+                    net.role = 'client';
+                    net.roomCode = code;
+                    net.hostConn = conn;
+                    showToast(`已成功連上房間 ${code}！正在同步棋局...`, 'success');
+                    updateNetworkControlsVisibility();
+                });
+
+                conn.on('data', (data) => {
+                    handleClientReceivedData(data);
+                });
+
+                conn.on('close', () => {
+                    showToast('房主已關閉房間或連線中斷', 'warn');
+                    leaveRoom();
+                });
+
+                conn.on('error', () => {
+                    showToast('連線中斷或無法傳送資料', 'warn');
+                });
+            });
+
+            peer.on('error', (err) => {
+                showToast(`無法加入房間 (${err.type})，請確認房號是否正確`, 'warn');
+                leaveRoom();
+            });
+        }
+
+        function leaveRoom() {
+            if (net.hostConn) {
+                try { net.hostConn.close(); } catch (e) {}
+            }
+            for (const c of net.clients) {
+                try { c.conn.close(); } catch (e) {}
+            }
+            if (net.peer) {
+                try { net.peer.destroy(); } catch (e) {}
+            }
+            net.role = null;
+            net.peer = null;
+            net.roomCode = '';
+            net.myPlayerIndex = 0;
+            net.hostConn = null;
+            net.clients = [];
+            updateNetworkControlsVisibility();
+            updateUI();
+        }
+
+        /**
+         * Host broadcasts authoritative state to all connected clients
+         */
+        function broadcastFullState(lastFeedbackMsg = null, lastFeedbackType = 'info') {
+            if (net.role !== 'host') return;
+
+            // Re-verify client slot assignments if k changed
+            const usedIndices = new Set([0]);
+            for (const c of net.clients) {
+                if (c.playerIndex >= state.k || c.playerIndex < 1 || usedIndices.has(c.playerIndex)) {
+                    c.playerIndex = -1;
+                    for (let i = 1; i < state.k; i++) {
+                        if (!usedIndices.has(i)) {
+                            c.playerIndex = i;
+                            break;
+                        }
+                    }
+                }
+                if (c.playerIndex >= 1) usedIndices.add(c.playerIndex);
+            }
+
+            const onlineIndices = [0, ...net.clients.map(c => c.playerIndex).filter(idx => idx >= 0)];
+
+            for (const c of net.clients) {
+                if (c.conn && c.conn.open) {
+                    c.conn.send({
+                        type: 'SYNC_STATE',
+                        assignedPlayerIndex: c.playerIndex,
+                        onlineIndices,
+                        lastFeedbackMsg,
+                        lastFeedbackType,
+                        payload: {
+                            k: state.k,
+                            n: state.n,
+                            L: state.L,
+                            points: state.points,
+                            segments: state.segments,
+                            triangles: state.triangles,
+                            players: state.players,
+                            currentTurn: state.currentTurn,
+                            isBonusTurn: state.isBonusTurn,
+                            history: state.history,
+                            gameOver: state.gameOver
+                        }
+                    });
+                }
+            }
+        }
+
+        function handleHostReceivedData(conn, data) {
+            if (!data || !data.type) return;
+
+            const clientEntry = net.clients.find(c => c.conn === conn);
+            if (!clientEntry) return;
+
+            if (data.type === 'REQUEST_MOVE') {
+                // Verify it is actually this client's turn
+                if (clientEntry.playerIndex !== state.currentTurn) {
+                    conn.send({
+                        type: 'ERROR_MSG',
+                        message: '目前不是你的回合！'
+                    });
+                    return;
+                }
+                executeMove(data.u, data.v, true);
+            } else if (data.type === 'EMOJI') {
+                const senderName = clientEntry.playerIndex >= 0
+                    ? PLAYER_PROFILES[clientEntry.playerIndex].name
+                    : '觀戰者';
+                showToast(`${senderName}: ${data.emoji}`, 'emoji');
+                // Relay to other clients
+                for (const c of net.clients) {
+                    if (c.conn && c.conn.open) {
+                        c.conn.send({ type: 'EMOJI', senderName, emoji: data.emoji });
+                    }
+                }
+            }
+        }
+
+        function handleClientReceivedData(data) {
+            if (!data || !data.type) return;
+
+            if (data.type === 'SYNC_STATE') {
+                const p = data.payload;
+                net.myPlayerIndex = data.assignedPlayerIndex;
+                state.k = p.k;
+                state.n = p.n;
+                state.L = p.L;
+                state.points = p.points;
+                state.segments = p.segments;
+                state.triangles = p.triangles;
+                state.players = p.players;
+                state.currentTurn = p.currentTurn;
+                state.isBonusTurn = p.isBonusTurn;
+                state.history = p.history;
+                state.gameOver = p.gameOver;
+                state.onlineIndices = data.onlineIndices || [0];
+
+                paramK.value = state.k;
+                paramN.value = state.n;
+                paramL.value = state.L;
+
+                state.selectedP1 = null;
+                state.selectedP2 = null;
+
+                computeAllValidMoves();
+                populatePointSelects();
+                updateNetworkControlsVisibility();
+                updateUI();
+                resizeCanvas();
+
+                if (data.lastFeedbackMsg) {
+                    showFeedback(data.lastFeedbackMsg, data.lastFeedbackType || 'info');
+                }
+
+                if (state.gameOver) {
+                    triggerGameOver();
+                } else {
+                    document.getElementById('gameover-modal').classList.add('hidden');
+                }
+            } else if (data.type === 'EMOJI') {
+                showToast(`${data.senderName}: ${data.emoji}`, 'emoji');
+            } else if (data.type === 'ERROR_MSG') {
+                showToast(data.message, 'warn');
+            }
+        }
+
+        function sendEmojiReaction(emoji) {
+            if (!net.role) return;
+            if (net.role === 'host') {
+                const senderName = PLAYER_PROFILES[0].name;
+                showToast(`${senderName}: ${emoji}`, 'emoji');
+                for (const c of net.clients) {
+                    if (c.conn && c.conn.open) {
+                        c.conn.send({ type: 'EMOJI', senderName, emoji });
+                    }
+                }
+            } else if (net.role === 'client' && net.hostConn && net.hostConn.open) {
+                net.hostConn.send({ type: 'EMOJI', emoji });
+            }
+        }
 
         // ============================================================================
         // Exact Integer 2D Computational Geometry Engine
@@ -707,14 +1233,43 @@
             populatePointSelects();
             updateUI();
             resizeCanvas();
+
+            if (net.isOnline && net.role === 'host') {
+                broadcastFullState('房主已生成新棋局！由 玩家 A 開始回合。', 'info');
+            }
         }
 
         // ============================================================================
         // Gameplay Execution
         // ============================================================================
 
-        function executeMove(u, v) {
+        function executeMove(u, v, isFromRemoteClient = false) {
             if (state.gameOver) return;
+
+            // Online Turn Permission Enforcement
+            if (net.isOnline && net.role) {
+                if (net.role === 'client') {
+                    if (state.currentTurn !== net.myPlayerIndex) {
+                        showFeedback(`目前是 ${state.players[state.currentTurn].name} 的回合，請等待對方行動！`, 'error');
+                        return;
+                    }
+                    const check = validateMove(u, v);
+                    if (!check.valid) {
+                        showFeedback(check.reason, 'error');
+                        return;
+                    }
+                    // Send move request to Host
+                    if (net.hostConn && net.hostConn.open) {
+                        net.hostConn.send({ type: 'REQUEST_MOVE', u, v });
+                    }
+                    return;
+                } else if (net.role === 'host' && !isFromRemoteClient) {
+                    if (state.currentTurn !== 0) {
+                        showFeedback(`目前是 ${state.players[state.currentTurn].name} 的回合，請等待對方行動！`, 'error');
+                        return;
+                    }
+                }
+            }
 
             const validation = validateMove(u, v);
             if (!validation.valid) {
@@ -769,28 +1324,36 @@
             selectP2.value = '';
 
             // 6. Determine next turn (Extra turn if pointsEarned > 0!)
+            let feedbackMsg = '';
+            let feedbackType = 'info';
             if (pointsEarned > 0) {
                 state.isBonusTurn = true;
-                showFeedback(
-                    `🎉 ${currentPlayer.name} 連上 P${minId}-P${maxId} 並組成 ${pointsEarned} 個三角形 (+${pointsEarned}分)！獲得額外獎勵回合！`,
-                    'bonus'
-                );
+                feedbackMsg = `🎉 ${currentPlayer.name} 連上 P${minId}-P${maxId} 並組成 ${pointsEarned} 個三角形 (+${pointsEarned}分)！獲得額外獎勵回合！`;
+                feedbackType = 'bonus';
+                showFeedback(feedbackMsg, feedbackType);
             } else {
                 state.isBonusTurn = false;
                 state.currentTurn = (state.currentTurn + 1) % state.k;
                 const nextPlayer = state.players[state.currentTurn];
-                showFeedback(
-                    `已連上 P${minId}-P${maxId}。現在輪到 ${nextPlayer.name} 進行回合。`,
-                    'info'
-                );
+                feedbackMsg = `已連上 P${minId}-P${maxId}。現在輪到 ${nextPlayer.name} 進行回合。`;
+                feedbackType = 'info';
+                showFeedback(feedbackMsg, feedbackType);
             }
 
             // 7. Recompute remaining valid moves & check Game Over
             const remaining = computeAllValidMoves();
+            if (remaining.length === 0) {
+                state.gameOver = true;
+            }
+
+            if (net.isOnline && net.role === 'host') {
+                broadcastFullState(feedbackMsg, feedbackType);
+            }
+
             updateUI();
             drawBoard();
 
-            if (remaining.length === 0) {
+            if (state.gameOver) {
                 triggerGameOver();
             }
         }
@@ -841,6 +1404,17 @@
             selectP1.value = state.selectedP1 || '';
             selectP2.value = state.selectedP2 || '';
 
+            if (!canLocalPlayerAct()) {
+                btnConnect.disabled = true;
+                const activePlayer = state.players[state.currentTurn];
+                if (!state.gameOver && activePlayer) {
+                    showFeedback(`⏳ 目前是 ${activePlayer.name} 的回合，請等待對方連線...`, 'info');
+                }
+                renderPointsList();
+                drawBoard();
+                return;
+            }
+
             if (state.selectedP1 && state.selectedP2) {
                 const res = validateMove(state.selectedP1, state.selectedP2);
                 btnConnect.disabled = !res.valid;
@@ -877,6 +1451,7 @@
             const turnDot = document.getElementById('turn-dot');
             const turnName = document.getElementById('turn-player-name');
             const bonusBadge = document.getElementById('bonus-turn-badge');
+            const lockBadge = document.getElementById('online-turn-lock-badge');
 
             turnName.textContent = curPlayer.name;
             turnDot.style.backgroundColor = curPlayer.color;
@@ -890,6 +1465,19 @@
                 bonusBadge.classList.add('hidden');
             }
 
+            if (net.isOnline && net.role && !state.gameOver) {
+                lockBadge.classList.remove('hidden');
+                if (state.currentTurn === net.myPlayerIndex) {
+                    lockBadge.textContent = '👉 輪到你了！請選擇兩點連線';
+                    lockBadge.className = 'px-2.5 py-0.5 text-xs font-bold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+                } else {
+                    lockBadge.textContent = `⏳ 等待 ${curPlayer.name} 行動中...`;
+                    lockBadge.className = 'px-2.5 py-0.5 text-xs font-semibold rounded-full bg-slate-800 text-slate-400 border border-slate-700';
+                }
+            } else {
+                lockBadge.classList.add('hidden');
+            }
+
             // Stats
             document.getElementById('stat-segments').textContent = state.segments.length;
             document.getElementById('stat-triangles').textContent = state.triangles.length;
@@ -897,9 +1485,19 @@
             document.getElementById('points-count-label').textContent = state.n;
             document.getElementById('history-count-label').textContent = state.history.length;
 
+            // Compute online status per player slot
+            const activeOnlineSet = new Set(
+                net.role === 'host'
+                    ? [0, ...net.clients.map(c => c.playerIndex)]
+                    : (state.onlineIndices || [])
+            );
+
             // Render Scoreboard
             scoreboardContainer.innerHTML = state.players.map((p, idx) => {
                 const isTurn = (idx === state.currentTurn) && !state.gameOver;
+                const isMe = net.isOnline && net.role && (idx === net.myPlayerIndex);
+                const isSlotOnline = net.isOnline && net.role && activeOnlineSet.has(idx);
+
                 return `
                     <div class="p-3 rounded-xl border transition flex items-center justify-between ${
                         isTurn ? 'bg-slate-800/90 active-turn-card' : 'bg-slate-800/40 border-slate-800 opacity-85'
@@ -907,11 +1505,15 @@
                         <div class="flex items-center gap-2.5">
                             <span class="w-3.5 h-3.5 rounded-full shadow-sm" style="background-color: ${p.color}"></span>
                             <div>
-                                <div class="text-xs font-bold text-white flex items-center gap-1.5">
+                                <div class="text-xs font-bold text-white flex flex-wrap items-center gap-1">
                                     ${p.name}
-                                    ${isTurn ? '<span class="text-[10px] px-1.5 py-0.2 bg-sky-500/20 text-sky-300 rounded">思考中</span>' : ''}
+                                    ${isMe ? '<span class="text-[10px] px-1.5 py-0.2 bg-indigo-500/30 text-indigo-200 border border-indigo-400/40 rounded">你</span>' : ''}
+                                    ${isTurn ? '<span class="text-[10px] px-1.5 py-0.2 bg-sky-500/20 text-sky-300 rounded">回合中</span>' : ''}
                                 </div>
-                                <div class="text-[11px] text-slate-400">已連 ${p.linesDrawn} 線</div>
+                                <div class="text-[11px] text-slate-400 flex items-center gap-1.5">
+                                    <span>已連 ${p.linesDrawn} 線</span>
+                                    ${net.isOnline && net.role ? `<span class="text-[10px] ${isSlotOnline ? 'text-emerald-400' : 'text-slate-500'}">● ${isSlotOnline ? '在線' : '等待加入'}</span>` : ''}
+                                </div>
                             </div>
                         </div>
                         <div class="text-right">
@@ -977,6 +1579,10 @@
 
         function handlePointClick(pid) {
             if (state.gameOver) return;
+            if (!canLocalPlayerAct()) {
+                showFeedback(`⏳ 目前是 ${state.players[state.currentTurn].name} 的回合，請等待對方行動！`, 'error');
+                return;
+            }
 
             if (state.selectedP1 === pid) {
                 state.selectedP1 = state.selectedP2;
@@ -1310,8 +1916,12 @@
             const clickedId = findNearestPointAtPixel(px, py);
 
             if (clickedId) {
+                if (!canLocalPlayerAct()) {
+                    showFeedback(`⏳ 目前是 ${state.players[state.currentTurn].name} 的回合，請等待對方行動！`, 'error');
+                    return;
+                }
                 // If user already selected P1 and now clicks a valid P2 directly on canvas,
-                // select it and let them see/confirm or immediately connect if they double-click
+                // immediately connect if valid
                 if (state.selectedP1 && !state.selectedP2 && state.selectedP1 !== clickedId) {
                     const check = validateMove(state.selectedP1, clickedId);
                     if (check.valid) {
@@ -1400,10 +2010,57 @@
         });
 
         // Modals & New Game Buttons
-        document.getElementById('btn-new-game').addEventListener('click', initNewGame);
-        document.getElementById('btn-play-again').addEventListener('click', initNewGame);
+        document.getElementById('btn-new-game').addEventListener('click', () => {
+            if (net.isOnline && net.role === 'client') {
+                showToast('只有房主 (玩家 A) 可以生成新棋局！', 'warn');
+                return;
+            }
+            initNewGame();
+        });
+        document.getElementById('btn-play-again').addEventListener('click', () => {
+            if (net.isOnline && net.role === 'client') {
+                showToast('請等待房主點擊「再來一局」生成新棋局！', 'warn');
+                return;
+            }
+            initNewGame();
+        });
         document.getElementById('btn-close-gameover').addEventListener('click', () => {
             document.getElementById('gameover-modal').classList.add('hidden');
+        });
+
+        // Online Mode & PeerJS Lobby Event Listeners
+        document.getElementById('mode-btn-local').addEventListener('click', () => setOnlineModeUI(false));
+        document.getElementById('mode-btn-online').addEventListener('click', () => setOnlineModeUI(true));
+        document.getElementById('btn-host-room').addEventListener('click', hostRoom);
+        document.getElementById('btn-join-room').addEventListener('click', () => {
+            const code = document.getElementById('input-room-code').value;
+            joinRoom(code);
+        });
+        document.getElementById('input-room-code').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                joinRoom(e.target.value);
+            }
+        });
+        document.getElementById('btn-leave-room').addEventListener('click', () => {
+            leaveRoom();
+            showToast('已離開線上房間', 'info');
+        });
+        document.getElementById('btn-copy-code').addEventListener('click', () => {
+            if (net.roomCode) {
+                copyTextToClipboard(net.roomCode, `已複製房號：${net.roomCode}`);
+            }
+        });
+        document.getElementById('btn-copy-link').addEventListener('click', () => {
+            if (net.roomCode) {
+                const url = new URL(window.location.href);
+                url.searchParams.set('room', net.roomCode);
+                copyTextToClipboard(url.toString(), '已複製邀請連結！傳給朋友點開即可自動進房');
+            }
+        });
+        document.querySelectorAll('.emoji-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                sendEmojiReaction(btn.getAttribute('data-emoji'));
+            });
         });
 
         const rulesModal = document.getElementById('rules-modal');
@@ -1413,9 +2070,18 @@
 
         window.addEventListener('resize', resizeCanvas);
 
-        // Start game on load
+        // Start game on load & auto-check for ?room=XXXXXX URL parameter
         window.onload = function () {
             initNewGame();
+
+            const params = new URLSearchParams(window.location.search);
+            const roomParam = params.get('room');
+            if (roomParam && roomParam.trim().length === 6) {
+                const cleanCode = roomParam.trim().toUpperCase();
+                setOnlineModeUI(true);
+                document.getElementById('input-room-code').value = cleanCode;
+                joinRoom(cleanCode);
+            }
         };
     </script>
 </body>
