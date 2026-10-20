@@ -344,10 +344,11 @@
                     <li>每組成一個新三角形，該玩家獲得 <strong>+1 分</strong>（若一線同時在兩側構成兩個三角形則得 2 分）。</li>
                     <li>得分的玩家可<strong>立即再進行一個額外回合</strong>！</li>
                 </ul>
-                <p><strong class="text-rose-400">4. 封鎖區域限制：</strong>已組成三角形的內部區域即被<strong>永久封鎖</strong>（塗上得分玩家的代表色）。之後任何玩家生成的線段：</p>
+                <p><strong class="text-rose-400">4. 線段相交與封鎖區域限制：</strong>已組成三角形的內部區域即被<strong>永久封鎖</strong>（塗上得分玩家的代表色）。之後任何玩家生成的線段：</p>
                 <ul class="list-disc list-inside pl-2 space-y-1 text-xs text-slate-300">
+                    <li><strong>不可穿過（相交）場上任何已存在的線段</strong>（僅允許在坐標端點處相連以構成折線或三角形）。</li>
                     <li><strong>不可穿過任何封鎖三角形的內部區域</strong>或切割封鎖三角形的邊。</li>
-                    <li>也不允許新生成的三角形將其他點或已封鎖區域包圍在內部，或直接穿過場上第三個點。</li>
+                    <li>也不允許新生成的線段直接跨過場上共線的第三個點。</li>
                 </ul>
                 <p><strong class="text-emerald-400">5. 勝負判定：</strong>當輪到某位玩家時，場上已無任何合法的兩點可供連線，遊戲立即結束，由總得分最高的玩家獲勝！</p>
             </div>
@@ -938,6 +939,48 @@
         }
 
         /**
+         * Checks if two segments AB and CD intersect or overlap anywhere other than a shared endpoint.
+         * Allows sharing a single endpoint (e.g., A === C) so long as they don't overlap collinearly.
+         */
+        function doSegmentsCrossOrOverlap(u, v, segU, segV) {
+            const A = getPoint(u);
+            const B = getPoint(v);
+            const C = getPoint(segU);
+            const D = getPoint(segV);
+
+            const shareU_C = (u === segU);
+            const shareU_D = (u === segV);
+            const shareV_C = (v === segU);
+            const shareV_D = (v === segV);
+
+            // If they share an endpoint, they only conflict if they are collinear and overlap in the same direction
+            if (shareU_C || shareU_D || shareV_C || shareV_D) {
+                if (isPointStrictlyOnSegment(C, A, B) ||
+                    isPointStrictlyOnSegment(D, A, B) ||
+                    isPointStrictlyOnSegment(A, C, D) ||
+                    isPointStrictlyOnSegment(B, C, D)) {
+                    return true;
+                }
+                return false;
+            }
+
+            // Disjoint endpoints: check proper crossing
+            if (segmentsStrictlyCross(A, B, C, D)) {
+                return true;
+            }
+
+            // Also check if any endpoint of one segment lies strictly in the interior of the other segment
+            if (isPointStrictlyOnSegment(C, A, B) ||
+                isPointStrictlyOnSegment(D, A, B) ||
+                isPointStrictlyOnSegment(A, C, D) ||
+                isPointStrictlyOnSegment(B, C, D)) {
+                return true;
+            }
+
+            return false;
+        }
+
+        /**
          * Checks if point P (which may have fractional coordinates, e.g., midpoint)
          * is strictly inside triangle ABC.
          */
@@ -1053,6 +1096,16 @@
                             reason: `不可直接跨過共線的中間點 P${R.id}(${R.x},${R.y})，請分段連線。`
                         };
                     }
+                }
+            }
+
+            // Check if segment PQ crosses or overlaps any existing segment on the board
+            for (const seg of state.segments) {
+                if (doSegmentsCrossOrOverlap(u, v, seg.u, seg.v)) {
+                    return {
+                        valid: false,
+                        reason: `線段不可穿過場上已存在的線段 (P${seg.u}-P${seg.v})！`
+                    };
                 }
             }
 
